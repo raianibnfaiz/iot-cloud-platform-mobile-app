@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../models/template.dart';
 import '../../services/auth_service.dart';
+import '../../services/api_service.dart';
+import '../../services/template_service.dart';
+import '../../services/toast_service.dart';
 import '../../utils/page_transition.dart';
 import '../../widgets/theme_toggle.dart';
 import '../auth/login_screen.dart';
@@ -9,7 +14,10 @@ import '../organization/organization_screen.dart';
 import '../settings/settings_screen.dart';
 import '../help/help_screen.dart';
 import '../about/about_screen.dart';
-import '../templates/templates_screen.dart';
+import '../templates/template_playground_screen.dart';
+import '../../providers/playground_provider.dart';
+import 'package:provider/provider.dart';
+import 'dart:async';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -20,6 +28,198 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _authService = AuthService();
+  final _templateService = TemplateService();
+  final _apiService = APIService();
+  List<Template> _templates = [];
+  bool _isLoading = true;
+  String? _error;
+  StreamSubscription? _templateUpdateSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTemplates();
+    // Listen for template updates
+    _templateUpdateSubscription = _templateService.onTemplateUpdate.listen((
+        updatedTemplate,
+        ) {
+      _updateTemplate(updatedTemplate);
+    });
+  }
+
+  @override
+  void dispose() {
+    _templateUpdateSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _updateTemplate(Template updatedTemplate) {
+    setState(() {
+      final index = _templates.indexWhere(
+            (t) => t.templateId == updatedTemplate.templateId,
+      );
+      if (index != -1) {
+        _templates[index] = updatedTemplate;
+      }
+    });
+  }
+
+  Future<void> _loadTemplates() async {
+    try {
+      final userData = await _apiService.getUserData();
+      if (userData == null) {
+        setState(() {
+          _error = 'User data not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final templates = await _templateService.getTemplates();
+
+      if (mounted) {
+        setState(() {
+          _templates = templates;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _createTemplate() async {
+    final nameController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Template'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: nameController,
+            decoration: const InputDecoration(
+              labelText: 'Template Name',
+              hintText: 'Enter template name',
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a template name';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context, nameController.text);
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    ).then((templateName) async {
+      if (templateName != null) {
+        try {
+          setState(() {
+            _isLoading = true;
+            _error = null;
+          });
+
+          final userData = await _apiService.getUserData();
+          if (userData == null) throw Exception('User data not found');
+
+          await _templateService.createTemplate(templateName);
+          await _loadTemplates();
+
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+            });
+            ToastService.success(
+              context,
+              message: 'Template created successfully!',
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() {
+              _error = e.toString().replaceAll('Exception: ', '');
+              _isLoading = false;
+            });
+            ToastService.error(context, message: _error!);
+          }
+        }
+      }
+    });
+  }
+
+  void _showTemplateDetails(BuildContext context, Template template) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Template Details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDetailRow('Template_Name', template.templateName),
+            const SizedBox(height: 8),
+            _buildDetailRow('Template_ID', template.templateId),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(
+                ClipboardData(
+                  text: "Template_Name=${template.templateName} \n Template_ID=${template.templateId}",
+                ),
+              );
+              if (context.mounted) {
+                Navigator.pop(context);
+                ToastService.success(
+                  context,
+                  message: 'Template Name & ID copied to clipboard!',
+                );
+              }
+            },
+            child: const Text('Copy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+        Expanded(
+          child: Text(value, style: const TextStyle(fontFamily: 'monospace')),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,13 +228,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('BJIT IoT Platform'),
         elevation: 0,
         actions: [
-          const ThemeToggle(),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              // Handle notifications
-            },
+            icon: const Icon(Icons.add),
+            onPressed: _createTemplate,
           ),
+          const ThemeToggle(),
+          // IconButton(
+          //   icon: const Icon(Icons.notifications_outlined),
+          //   onPressed: () {
+          //     // Handle notifications
+          //   },
+          // ),
         ],
       ),
       drawer: Drawer(
@@ -66,7 +270,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(width: 12),
                     const Text(
-                      'BJIT IoT',
+                      'BJIT IoT Platform',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -168,7 +372,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     MaterialPageRoute(
                       builder: (context) => const LoginScreen(),
                     ),
-                    (route) => false,
+                        (route) => false,
                   );
                 }
               },
@@ -176,88 +380,233 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // _buildCard(
-            //   title: 'Explore Blueprints',
-            //   description:
-            //       'Ready-to-use projects that include code example and step-by-step guide to create functional devices in minutes.',
-            //   icon: Icons.description_outlined,
-            //   color: const Color(0xFF3498DB),
-            //   onTap: () {
-            //     // Handle explore blueprints
-            //   },
-            // ),
-            // const SizedBox(height: 16),
-            // _buildCard(
-            //   title: 'Add Device',
-            //   description:
-            //       'Have a pre-flashed device that is ready to be connected to Blynk IoT?',
-            //   icon: Icons.add,
-            //   color: const Color(0xFF2ECC71),
-            //   onTap: () {
-            //     // Handle add device
-            //   },
-            // ),
-            // const SizedBox(height: 16),
-            _buildCard(
-              title: 'Developer Zone',
-              description: 'Edit and configure your templates here',
-              icon: Icons.build_outlined,
-              color: const Color(0xFF2ECC71),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const TemplatesScreen(),
-                  ),
-                );
-              },
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 12, 8),
+            child: Text(
+              'My Templates',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCard({
-    required String title,
-    required String description,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 32, color: color),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              ),
-            ],
           ),
-        ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Error: $_error',
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLoading = true;
+                        _error = null;
+                      });
+                      _loadTemplates();
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+                : _templates.isEmpty
+                ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'No templates found',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _createTemplate,
+                    child: const Text('Create Template'),
+                  ),
+                ],
+              ),
+            )
+                : RefreshIndicator(
+              onRefresh: _loadTemplates,
+              child: GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 1.2,
+                ),
+                itemCount: _templates.length,
+                itemBuilder: (context, index) {
+                  final template = _templates[index];
+                  return Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Stack(
+                      children: [
+                        InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChangeNotifierProvider(
+                                  create: (_) => PlaygroundProvider(),
+                                  child: TemplatePlaygroundScreen(
+                                    template: template,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.dashboard_outlined,
+                                  size: 40,
+                                  color: Theme.of(context).primaryColor,
+                                ),
+                                const SizedBox(height: 12),
+                                Flexible(
+                                  child: Text(
+                                    template.templateName,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '${template.widgetList.length} widgets',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'details',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.info_outline),
+                                    SizedBox(width: 8),
+                                    Text('Template Details'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline, color: Colors.red),
+                                    SizedBox(width: 8),
+                                    Text('Delete Template', style: TextStyle(color: Colors.red)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onSelected: (value) {
+                              if (value == 'details') {
+                                _showTemplateDetails(context, template);
+                              } else if (value == 'delete') {
+                                // Show delete confirmation dialog
+                                showDialog(
+                                  context: context,
+                                  builder: (dialogContext) => AlertDialog(
+                                    title: const Text('Delete Template'),
+                                    content: Text(
+                                      'Are you sure you want to delete "${template.templateName}"? '
+                                          'This action cannot be undone.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(dialogContext),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: Colors.red,
+                                        ),
+                                        onPressed: () async {
+                                          // Close the confirmation dialog
+                                          Navigator.pop(dialogContext);
+                                          try {
+                                            setState(() => _isLoading = true);
+                                            await _templateService.deleteTemplate(
+                                              template.templateId,
+                                            );
+                                            await _loadTemplates();
+                                            if (mounted) {
+                                              ToastService.success(
+                                                context,
+                                                message: 'Template deleted successfully!',
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (mounted) {
+                                              ToastService.error(
+                                                context,
+                                                message: e.toString().replaceAll(
+                                                  'Exception: ',
+                                                  '',
+                                                ),
+                                              );
+                                            }
+                                          } finally {
+                                            if (mounted) {
+                                              setState(() => _isLoading = false);
+                                            }
+                                          }
+                                        },
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
