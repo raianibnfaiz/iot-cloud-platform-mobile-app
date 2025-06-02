@@ -1,0 +1,35 @@
+{
+    "name": "bjit_iot_platform_mobile_app",
+    "short_name": "bjit_iot_platform_mobile_app",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "The BJIT IoT Platform Mobile App is a comprehensive solution designed to integrate IoT devices with user-friendly mobile interfaces, enabling seamless control, monitoring, and automation across industries. Leveraging BJIT's expertise in IoT, AI, and cross-platform development, the app supports features like real-time data analytics, remote device management, and secure connectivity. It is built using frameworks like Xamarin and PhoneGap for compatibility with iOS and Android, ensuring scalability and interoperability with IoT ecosystems such as smart homes, healthcare, and industrial automation. BJIT’s platform emphasizes security, cloud integration, and user-centric design, empowering businesses to enhance operational efficiency and deliver transformative IoT experiences.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

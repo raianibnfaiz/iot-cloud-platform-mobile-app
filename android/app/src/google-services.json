@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "938547830302",
+    "project_id": "iot-cloud-platform-app",
+    "storage_bucket": "iot-cloud-platform-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:938547830302:android:aa00649a2918fbc02fd80f",
+        "android_client_info": {
+          "package_name": "com.raianibnfaiz.bjit_iot_platform_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "938547830302-1rs8a5i32qalpt3h0p4bq46sjt1n3jfu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.raianibnfaiz.bjit_iot_platform_mobile",
+            "certificate_hash": "1863afce5a52b69ca1272923c88e574f4db89ad9"
+          }
+        },
+        {
+          "client_id": "938547830302-v6driok5kg1ochpo3j4idbqopgru2qp4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAy0f18fFiKpv4NEnhWk6VgQ-9fAQ8tFeQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "938547830302-v6driok5kg1ochpo3j4idbqopgru2qp4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

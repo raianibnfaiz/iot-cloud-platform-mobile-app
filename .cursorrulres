@@ -1,0 +1,18 @@
+# Lessons
+
+## New Lessons
+[Previous lessons remain unchanged...]
+
+- UI/UX Best Practices:
+  - Show alerts after navigation completes to avoid blocking
+  - Use delayed overlays for smoother transitions
+  - Consider adding immediate option for critical alerts
+  - Handle alert dismissal properly during navigation
+  - Maintain proper z-index for overlays
+  - Use appropriate timing for user feedback
+  - Navigate first, then show feedback for better UX
+  - Don't block navigation with feedback mechanisms
+  - Use non-blocking toast messages for status updates
+  - Consider context lifecycle in navigation flows
+
+[Rest of the file remains unchanged...] 
