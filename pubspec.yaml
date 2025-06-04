@@ -52,7 +52,7 @@ dependencies:
   permission_handler: ^11.3.0
   scoped_model: ^2.0.0
   wifi_scan: ^0.4.0+1
-
+  flutter_bluetooth_serial: ^0.4.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
