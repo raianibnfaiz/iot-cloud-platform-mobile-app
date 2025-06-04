@@ -15,6 +15,7 @@ import '../settings/settings_screen.dart';
 import '../help/help_screen.dart';
 import '../about/about_screen.dart';
 import '../templates/template_playground_screen.dart';
+import '../device/connect_device_screen.dart';
 import '../../providers/playground_provider.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
@@ -168,6 +169,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  Future<void> _connectToDevice() async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ConnectDeviceScreen(),
+      ),
+    );
+  }
+
   void _showTemplateDetails(BuildContext context, Template template) {
     showDialog(
       context: context,
@@ -228,9 +238,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('BJIT IoT Platform'),
         elevation: 0,
         actions: [
-          IconButton(
+          PopupMenuButton<String>(
             icon: const Icon(Icons.add),
-            onPressed: _createTemplate,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, 10),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'create_template',
+                child: Row(
+                  children: [
+                    Icon(Icons.dashboard_outlined),
+                    SizedBox(width: 8),
+                    Text('Create Template'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'connect_device',
+                child: Row(
+                  children: [
+                    Icon(Icons.devices),
+                    SizedBox(width: 8),
+                    Text('Connect to Device'),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (value) {
+              if (value == 'create_template') {
+                _createTemplate();
+              } else if (value == 'connect_device') {
+                _connectToDevice();
+              }
+            },
           ),
           const ThemeToggle(),
           // IconButton(
