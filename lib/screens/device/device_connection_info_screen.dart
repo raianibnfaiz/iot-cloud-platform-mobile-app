@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import '../../models/template.dart';
 import 'package:wifi_scan/wifi_scan.dart';
+import '../../services/template_service.dart';
+import 'qr_scanner_screen.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class DeviceConnectionInfoScreen extends StatefulWidget {
   final Template template;
@@ -28,11 +31,150 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
   bool isConnected = false;
   bool isScanning = false;
   bool isConnecting = false;
+  final _templateService = TemplateService();
+  List<Template> _templates = [];
+  Template? _selectedTemplate;
+  final _passwordController = TextEditingController();
+  bool _isLoading = true;
+  List<WiFiAccessPoint> _accessPoints = [];
+  bool _isScanningWifi = false;
+  WiFiAccessPoint? _selectedNetwork;
+
+  // Helper function to find matching WiFiAccessPoint
+  WiFiAccessPoint? _findMatchingNetwork(WiFiAccessPoint? network) {
+    if (network == null) return null;
+    return _accessPoints.firstWhere(
+      (ap) => ap.ssid == network.ssid,
+      orElse: () => network,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTemplate = widget.template;
+    _passwordController.text = widget.wifiPassword;
+    _selectedNetwork = widget.wifiNetwork;
+    _loadTemplates();
+    _initializeWiFiScan();
+  }
 
   @override
   void dispose() {
     connection?.dispose();
+    _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadTemplates() async {
+    try {
+      final templates = await _templateService.getTemplates();
+      if (mounted) {
+        setState(() {
+          _templates = templates;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load templates: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _initializeWiFiScan() async {
+    final canScan = await WiFiScan.instance.canStartScan();
+    if (canScan != CanStartScan.yes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Cannot scan for WiFi networks: ${canScan.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    await _startWiFiScan();
+  }
+
+  Future<void> _startWiFiScan() async {
+    setState(() {
+      _isScanningWifi = true;
+    });
+
+    try {
+      // Request permissions individually
+      final locationStatus = await Permission.location.request();
+      final nearbyWifiStatus = await Permission.nearbyWifiDevices.request();
+
+      if (!locationStatus.isGranted || !nearbyWifiStatus.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Required permissions not granted'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final isScanning = await WiFiScan.instance.startScan();
+      if (!isScanning) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to start WiFi scan'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Wait for scan results
+      await Future.delayed(const Duration(seconds: 2));
+      final results = await WiFiScan.instance.getScannedResults();
+      
+      // Create a map to store unique SSIDs with their strongest signal
+      final Map<String, WiFiAccessPoint> uniqueNetworks = {};
+      for (var accessPoint in results) {
+        final ssid = accessPoint.ssid.isNotEmpty ? accessPoint.ssid : 'Hidden Network';
+        if (!uniqueNetworks.containsKey(ssid) ||
+            accessPoint.level > uniqueNetworks[ssid]!.level) {
+          uniqueNetworks[ssid] = accessPoint;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _accessPoints = uniqueNetworks.values.toList();
+          _isScanningWifi = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isScanningWifi = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error scanning WiFi: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _connectToDevice() async {
@@ -137,38 +279,14 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
     if (connection == null) return;
 
     try {
-      // Create a JSON-like string with all the configuration data
-      String configData = 'CONFIG:'
-          'TEMPLATE_NAME:${widget.template.templateName},'
-          'TEMPLATE_ID:${widget.template.templateId},'
-          'WIFI_SSID:${widget.wifiNetwork.ssid},'
-          'WIFI_PASSWORD:${widget.wifiPassword},'
-          'DEVICE_ID:${widget.deviceId}';
+      // Create JSON string with the specified pattern
+      String configData = '''{"authToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im1vb25jc2VydTE0QGdtYWlsLmNvbSIsInVzZXJfaWQiOiJ1c3JfYTRiZmU3ODE3ZiIsImlhdCI6MTc0NzI4Nzk3MX0.z0rvXD59zTHm-gyXffQf2wXvPxQ5CaMj37v_Lc5xJy0","template_id":"${_selectedTemplate?.templateId}","VirtualPin":${_selectedTemplate?.virtual_pins.length},"WifiSSID":"${_selectedNetwork?.ssid}","WiFipassword":"${_passwordController.text}"}\n''';
 
       // Send the configuration data
       connection!.output.add(Uint8List.fromList(configData.codeUnits));
       await connection!.output.allSent;
 
       debugPrint("Sent configuration data to ESP32: $configData");
-
-      // Optional: Send individual commands for easier parsing on ESP32 side
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      List<String> commands = [
-        'TEMPLATE_NAME:${widget.template.templateName}',
-        'TEMPLATE_ID:${widget.template.templateId}',
-        'WIFI_SSID:${widget.wifiNetwork.ssid}',
-        'WIFI_PASSWORD:${widget.wifiPassword}',
-        'DEVICE_ID:${widget.deviceId}',
-        'CONFIG_END'
-      ];
-
-      for (String command in commands) {
-        connection!.output.add(Uint8List.fromList(command.codeUnits));
-        await connection!.output.allSent;
-        await Future.delayed(const Duration(milliseconds: 50));
-        debugPrint("Sent: $command");
-      }
 
     } catch (e) {
       debugPrint('Failed to send configuration data: $e');
@@ -254,20 +372,19 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
             const Text(
               'Template Information',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
+                fontFamily: 'Roboto',
+                letterSpacing: 0.5,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 16),
-            _buildInfoCard(
-              'Template Name',
-              widget.template.templateName,
-              Icons.dashboard_outlined,
-            ),
+            _buildTemplateDropdown(),
             const SizedBox(height: 12),
             _buildInfoCard(
               'Template ID',
-              widget.template.templateId,
+              _selectedTemplate?.templateId ?? '',
               Icons.fingerprint,
             ),
             const SizedBox(height: 24),
@@ -276,20 +393,19 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
             const Text(
               'WiFi Information',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
+                fontFamily: 'Roboto',
+                letterSpacing: 0.5,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 16),
-            _buildInfoCard(
-              'Network Name',
-              widget.wifiNetwork.ssid,
-              Icons.wifi,
-            ),
+            _buildWiFiNetworkDropdown(),
             const SizedBox(height: 12),
-            _buildPasswordCard(
+            _buildEditablePasswordCard(
               'Password',
-              widget.wifiPassword,
+              _passwordController,
               Icons.lock,
             ),
             const SizedBox(height: 24),
@@ -298,8 +414,11 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
             const Text(
               'Device Information',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
+                fontFamily: 'Roboto',
+                letterSpacing: 0.5,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 16),
@@ -313,76 +432,238 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
             // Connect/Disconnect Button
             Center(
               child: isConnected
-                  ? Column(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _disconnectDevice,
-                    icon: const Icon(Icons.bluetooth_disabled),
-                    label: const Text('Disconnect Device'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _disconnectDevice,
+                              icon: const Icon(Icons.bluetooth_disabled),
+                              label: const Text('Disconnect'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                if (connection != null) {
+                                  await _sendConfigurationData();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Configuration resent to device'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Resend Config'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      textStyle: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: isConnecting ? null : _connectToDevice,
+                      icon: isConnecting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.bluetooth_searching),
+                      label: Text(isConnecting ? 'Connecting...' : 'Connect Device'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTemplateDropdown() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Template Name',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else
+              DropdownButtonFormField<String>(
+                value: _selectedTemplate?.templateId,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                items: _templates.map((Template template) {
+                  return DropdownMenuItem<String>(
+                    value: template.templateId,
+                    child: Text(template.templateName),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    final selectedTemplate = _templates.firstWhere(
+                      (t) => t.templateId == newValue,
+                      orElse: () => widget.template,
+                    );
+                    setState(() {
+                      _selectedTemplate = selectedTemplate;
+                    });
+                  }
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditablePasswordCard(String title, TextEditingController controller, IconData icon) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF2196F3)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      if (connection != null) {
-                        await _sendConfigurationData();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Configuration resent to device'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Resend Configuration'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: controller,
+                    obscureText: !_showPassword,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _showPassword ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _showPassword = !_showPassword;
+                          });
+                        },
                       ),
                     ),
                   ),
                 ],
-              )
-                  : ElevatedButton.icon(
-                onPressed: isConnecting ? null : _connectToDevice,
-                icon: isConnecting
-                    ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                    : const Icon(Icons.bluetooth_searching),
-                label: Text(isConnecting ? 'Connecting...' : 'Connect Device'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWiFiNetworkDropdown() {
+    // Find the matching network in the current list
+    final currentNetwork = _findMatchingNetwork(_selectedNetwork);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Network Name',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
                   ),
                 ),
+                IconButton(
+                  icon: _isScanningWifi
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                  onPressed: _isScanningWifi ? null : _startWiFiScan,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<WiFiAccessPoint>(
+              value: currentNetwork,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
+              items: _accessPoints.map((WiFiAccessPoint network) {
+                return DropdownMenuItem<WiFiAccessPoint>(
+                  value: network,
+                  child: Text(network.ssid.isNotEmpty ? network.ssid : 'Hidden Network'),
+                );
+              }).toList(),
+              onChanged: (WiFiAccessPoint? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _selectedNetwork = newValue;
+                  });
+                }
+              },
             ),
           ],
         ),
@@ -420,59 +701,23 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPasswordCard(String title, String value, IconData icon) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Icon(icon, color: const Color(0xFF2196F3)),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
+            if (title == 'Device ID')
+              IconButton(
+                icon: const Icon(Icons.qr_code_scanner),
+                onPressed: () {
+                  // Navigate back to QR scanner screen
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => QRScannerScreen(
+                        template: _selectedTemplate ?? widget.template,
+                        wifiNetwork: widget.wifiNetwork,
+                        wifiPassword: _passwordController.text,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _showPassword ? value : '••••••••',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          _showPassword ? Icons.visibility_off : Icons.visibility,
-                          color: Colors.grey,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _showPassword = !_showPassword;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ],
+                  );
+                },
               ),
-            ),
           ],
         ),
       ),

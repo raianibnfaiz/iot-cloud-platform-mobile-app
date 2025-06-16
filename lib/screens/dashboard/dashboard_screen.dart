@@ -246,16 +246,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             position: PopupMenuPosition.under,
             offset: const Offset(0, 10),
             itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'create_template',
-                child: Row(
-                  children: [
-                    Icon(Icons.dashboard_outlined),
-                    SizedBox(width: 8),
-                    Text('Create Template'),
-                  ],
-                ),
-              ),
+              // const PopupMenuItem(
+              //   value: 'create_template',
+              //   child: Row(
+              //     children: [
+              //       Icon(Icons.dashboard_outlined),
+              //       SizedBox(width: 8),
+              //       Text('Create Template'),
+              //     ],
+              //   ),
+              // ),
               const PopupMenuItem(
                 value: 'connect_device',
                 child: Row(
@@ -439,215 +439,220 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Error: $_error',
-                    style: const TextStyle(color: Colors.red),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _isLoading = true;
-                        _error = null;
-                      });
-                      _loadTemplates();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
-                : _templates.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'No templates found',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _createTemplate,
-                    child: const Text('Create Template'),
-                  ),
-                ],
-              ),
-            )
-                : RefreshIndicator(
-              onRefresh: _loadTemplates,
-              child: GridView.builder(
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.2,
-                ),
-                itemCount: _templates.length,
-                itemBuilder: (context, index) {
-                  final template = _templates[index];
-                  return Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Stack(
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChangeNotifierProvider(
-                                  create: (_) => PlaygroundProvider(),
-                                  child: TemplatePlaygroundScreen(
-                                    template: template,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.dashboard_outlined,
-                                  size: 40,
-                                  color: Theme.of(context).primaryColor,
-                                ),
-                                const SizedBox(height: 12),
-                                Flexible(
-                                  child: Text(
-                                    template.templateName,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '${template.widgetList.length} widgets',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Error: $_error',
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isLoading = true;
+                                  _error = null;
+                                });
+                                _loadTemplates();
+                              },
+                              child: const Text('Retry'),
+                            ),
+                          ],
                         ),
-                        Positioned(
-                          top: 4,
-                          right: 4,
-                          child: PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'details',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.info_outline),
-                                    SizedBox(width: 8),
-                                    Text('Template Details'),
-                                  ],
-                                ),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete_outline, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('Delete Template', style: TextStyle(color: Colors.red)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            onSelected: (value) {
-                              if (value == 'details') {
-                                _showTemplateDetails(context, template);
-                              } else if (value == 'delete') {
-                                // Show delete confirmation dialog
-                                showDialog(
-                                  context: context,
-                                  builder: (dialogContext) => AlertDialog(
-                                    title: const Text('Delete Template'),
-                                    content: Text(
-                                      'Are you sure you want to delete "${template.templateName}"? '
-                                          'This action cannot be undone.',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(dialogContext),
-                                        child: const Text('Cancel'),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadTemplates,
+                        child: _templates.isEmpty
+                            ? ListView(
+                                children: [
+                                  SizedBox(
+                                    height: MediaQuery.of(context).size.height * 0.6,
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Text(
+                                            'No templates found',
+                                            style: TextStyle(fontSize: 18),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          ElevatedButton(
+                                            onPressed: _createTemplate,
+                                            child: const Text('Create Template'),
+                                          ),
+                                        ],
                                       ),
-                                      TextButton(
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: Colors.red,
-                                        ),
-                                        onPressed: () async {
-                                          // Close the confirmation dialog
-                                          Navigator.pop(dialogContext);
-                                          try {
-                                            setState(() => _isLoading = true);
-                                            await _templateService.deleteTemplate(
-                                              template.templateId,
-                                            );
-                                            await _loadTemplates();
-                                            if (mounted) {
-                                              ToastService.success(
-                                                context,
-                                                message: 'Template deleted successfully!',
-                                              );
-                                            }
-                                          } catch (e) {
-                                            if (mounted) {
-                                              ToastService.error(
-                                                context,
-                                                message: e.toString().replaceAll(
-                                                  'Exception: ',
-                                                  '',
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : GridView.builder(
+                                padding: const EdgeInsets.all(16),
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 16,
+                                  mainAxisSpacing: 16,
+                                  childAspectRatio: 1.2,
+                                ),
+                                itemCount: _templates.length,
+                                itemBuilder: (context, index) {
+                                  final template = _templates[index];
+                                  return Card(
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Stack(
+                                      children: [
+                                        InkWell(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => ChangeNotifierProvider(
+                                                  create: (_) => PlaygroundProvider(),
+                                                  child: TemplatePlaygroundScreen(
+                                                    template: template,
+                                                  ),
                                                 ),
-                                              );
-                                            }
-                                          } finally {
-                                            if (mounted) {
-                                              setState(() => _isLoading = false);
-                                            }
-                                          }
-                                        },
-                                        child: const Text('Delete'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
+                                              ),
+                                            );
+                                          },
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.dashboard_outlined,
+                                                  size: 40,
+                                                  color: Theme.of(context).primaryColor,
+                                                ),
+                                                const SizedBox(height: 12),
+                                                Flexible(
+                                                  child: Text(
+                                                    template.templateName,
+                                                    style: const TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  '${template.widgetList.length} widgets',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    color: Colors.grey[600],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 4,
+                                          right: 4,
+                                          child: PopupMenuButton<String>(
+                                            icon: const Icon(Icons.more_vert),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            itemBuilder: (context) => [
+                                              const PopupMenuItem(
+                                                value: 'details',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.info_outline),
+                                                    SizedBox(width: 8),
+                                                    Text('Template Details'),
+                                                  ],
+                                                ),
+                                              ),
+                                              PopupMenuItem(
+                                                value: 'delete',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.delete_outline, color: Colors.red),
+                                                    SizedBox(width: 8),
+                                                    Text('Delete Template', style: TextStyle(color: Colors.red)),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                            onSelected: (value) {
+                                              if (value == 'details') {
+                                                _showTemplateDetails(context, template);
+                                              } else if (value == 'delete') {
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (dialogContext) => AlertDialog(
+                                                    title: const Text('Delete Template'),
+                                                    content: Text(
+                                                      'Are you sure you want to delete "${template.templateName}"? '
+                                                          'This action cannot be undone.',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () => Navigator.pop(dialogContext),
+                                                        child: const Text('Cancel'),
+                                                      ),
+                                                      TextButton(
+                                                        style: TextButton.styleFrom(
+                                                          foregroundColor: Colors.red,
+                                                        ),
+                                                        onPressed: () async {
+                                                          Navigator.pop(dialogContext);
+                                                          try {
+                                                            setState(() => _isLoading = true);
+                                                            await _templateService.deleteTemplate(
+                                                              template.templateId,
+                                                            );
+                                                            await _loadTemplates();
+                                                            if (mounted) {
+                                                              ToastService.success(
+                                                                context,
+                                                                message: 'Template deleted successfully!',
+                                                              );
+                                                            }
+                                                          } catch (e) {
+                                                            if (mounted) {
+                                                              ToastService.error(
+                                                                context,
+                                                                message: e.toString().replaceAll(
+                                                                  'Exception: ',
+                                                                  '',
+                                                                ),
+                                                              );
+                                                            }
+                                                          } finally {
+                                                            if (mounted) {
+                                                              setState(() => _isLoading = false);
+                                                            }
+                                                          }
+                                                        },
+                                                        child: const Text('Delete'),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
           ),
         ],
       ),

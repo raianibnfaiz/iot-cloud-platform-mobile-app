@@ -198,6 +198,15 @@ class Template {
     required this.virtual_pins,
   });
 
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is Template && other.templateId == templateId;
+  }
+
+  @override
+  int get hashCode => templateId.hashCode;
+
   factory Template.fromJson(Map<String, dynamic> json) {
     try {
       // Explicitly create a properly typed List<VirtualPin>
