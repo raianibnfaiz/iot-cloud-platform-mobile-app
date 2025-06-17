@@ -6,6 +6,7 @@ import 'package:wifi_scan/wifi_scan.dart';
 import '../../services/template_service.dart';
 import 'qr_scanner_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../services/api_service.dart';
 
 class DeviceConnectionInfoScreen extends StatefulWidget {
   final Template template;
@@ -32,6 +33,7 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
   bool isScanning = false;
   bool isConnecting = false;
   final _templateService = TemplateService();
+  final _apiService = APIService();
   List<Template> _templates = [];
   Template? _selectedTemplate;
   final _passwordController = TextEditingController();
@@ -39,6 +41,8 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
   List<WiFiAccessPoint> _accessPoints = [];
   bool _isScanningWifi = false;
   WiFiAccessPoint? _selectedNetwork;
+  List<int>? _assignedPins;
+  bool _isRequestingPins = false;
 
   // Helper function to find matching WiFiAccessPoint
   WiFiAccessPoint? _findMatchingNetwork(WiFiAccessPoint? network) {
@@ -231,8 +235,14 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
     if (connection == null) return;
 
     try {
+      // Get the auth token
+      final token = await _apiService.getServerToken();
+      if (token == null) {
+        throw Exception('No authentication token found');
+      }
+
       // Create JSON string with the specified pattern
-      String configData = '''{"authToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im1vb25jc2VydTE0QGdtYWlsLmNvbSIsInVzZXJfaWQiOiJ1c3JfYTRiZmU3ODE3ZiIsImlhdCI6MTc0NzI4Nzk3MX0.z0rvXD59zTHm-gyXffQf2wXvPxQ5CaMj37v_Lc5xJy0","template_id":"${_selectedTemplate?.templateId}","VirtualPin":${_selectedTemplate?.virtual_pins.length},"WifiSSID":"${_selectedNetwork?.ssid}","WiFipassword":"${_passwordController.text}"}\n''';
+      String configData = '''{"authToken":"$token","template_id":"${_selectedTemplate?.templateId}","VirtualPin":${_assignedPins != null ? _assignedPins : []},"WifiSSID":"${_selectedNetwork?.ssid}","WiFipassword":"${_passwordController.text}"}\n''';
 
       // Send the configuration data
       connection!.output.add(Uint8List.fromList(configData.codeUnits));
@@ -268,6 +278,68 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
           backgroundColor: Colors.blue,
         ),
       );
+    }
+  }
+
+  Future<void> _requestVirtualPins() async {
+    if (_selectedTemplate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a template first'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check if device ID matches "4x_switches"
+    if (widget.deviceId != "4x_switches") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Virtual pin request is only available for 4x_switches device'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isRequestingPins = true;
+    });
+
+    try {
+      final pins = await _apiService.requestVirtualPins(
+        templateId: _selectedTemplate!.templateId,
+        templateName: _selectedTemplate!.templateName,
+        componentName: '4x_switches',
+      );
+
+      setState(() {
+        _assignedPins = pins;
+        _isRequestingPins = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully assigned pins: ${pins.join(", ")}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isRequestingPins = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to request virtual pins: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -380,6 +452,66 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
               Icons.devices,
             ),
             const SizedBox(height: 32),
+
+            // Request Virtual Pin Button
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: _isRequestingPins ? null : _requestVirtualPins,
+                icon: _isRequestingPins
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.pin),
+                label: Text(_isRequestingPins ? 'Requesting Pins...' : 'Request Virtual Pin'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            if (_assignedPins != null) ...[
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Assigned Virtual Pins',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _assignedPins!.join(", "),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
 
             // Connect/Disconnect Button
             Center(

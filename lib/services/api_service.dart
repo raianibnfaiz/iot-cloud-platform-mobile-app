@@ -7,7 +7,7 @@ import '../models/template.dart';
 class APIService {
   static const String baseUrl =
        //'https://cloud-platform-server-for-bjit.onrender.com';
-  'http://192.168.154.145:3000';
+  'http://192.168.154.187:3000';
   static const String _tokenKey = 'server_token';
   static const String _userKey = 'user_data';
 
@@ -179,6 +179,46 @@ class APIService {
     } catch (e) {
       debugPrint('Error updating template: $e');
       throw Exception('Failed to update template: $e');
+    }
+  }
+
+  Future<List<int>> requestVirtualPins({
+    required String templateId,
+    required String templateName,
+    required String componentName,
+  }) async {
+    try {
+      final token = await getServerToken();
+      if (token == null) throw Exception('No auth token found');
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/users/templates/mobileupdate/$templateId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'template_name': templateName,
+          'component_name': componentName,
+        }),
+      );
+
+      debugPrint('Request virtual pins response status: ${response.statusCode}');
+      debugPrint('Request virtual pins response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['assignedPins'] != null) {
+          return List<int>.from(responseData['assignedPins']);
+        }
+        throw Exception('Invalid response format: assignedPins not found');
+      } else {
+        throw Exception('Failed to request virtual pins: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error requesting virtual pins: $e');
+      throw Exception('Failed to request virtual pins: $e');
     }
   }
 }
