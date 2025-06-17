@@ -56,11 +56,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _updateTemplate(Template updatedTemplate) {
     setState(() {
+      // Check if the template already exists in the list
       final index = _templates.indexWhere(
-            (t) => t.templateId == updatedTemplate.templateId,
+        (t) => t.templateId == updatedTemplate.templateId,
       );
+      
       if (index != -1) {
+        // Update existing template
         _templates[index] = updatedTemplate;
+      } else {
+        // Add new template to the list
+        _templates.add(updatedTemplate);
       }
     });
   }

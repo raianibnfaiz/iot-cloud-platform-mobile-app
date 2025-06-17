@@ -55,7 +55,7 @@ class TemplateService {
     }
   }
 
-  Future<Template> createTemplate(String templateName) async {
+  Future<Template> createTemplate(String name) async {
     try {
       debugPrint('Creating template');
       final token = await _apiService.getServerToken();
@@ -68,18 +68,27 @@ class TemplateService {
           'accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'template_name': templateName, 'widget_list': []}),
+        body: jsonEncode({'template_name': name, 'widget_list': []}),
       );
 
-      final responseData = jsonDecode(response.body);
+      debugPrint('Create template response status: ${response.statusCode}');
+      debugPrint('Create template response body: ${response.body}');
 
-      if (responseData['status'] == 'success' &&
-          responseData['template'] != null) {
-        return Template.fromJson(responseData['template']);
+      final responseData = jsonDecode(response.body);
+      
+      if (response.statusCode == 200 || responseData['status'] == 'success') {
+        if (responseData['template'] != null) {
+          final template = Template.fromJson(responseData['template']);
+          _templateUpdateController.add(template); // Notify listeners about the new template
+          return template;
+        } else {
+          throw Exception('Template data not found in response');
+        }
       } else {
-        throw Exception('Failed to create template: ${response.body}');
+        throw Exception(responseData['message'] ?? 'Failed to create template');
       }
     } catch (e) {
+      debugPrint('Error creating template: $e');
       throw Exception('Failed to create template: $e');
     }
   }

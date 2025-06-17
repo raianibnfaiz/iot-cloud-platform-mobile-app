@@ -25,6 +25,7 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
   bool _isScanning = false;
   String? _error;
   String _password = '';
+  bool _showPassword = false;
   StreamSubscription? _templateUpdateSubscription;
 
   @override
@@ -57,70 +58,42 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
   }
 
   Future<void> _initializeWiFiScan() async {
-    final canScan = await WiFiScan.instance.canStartScan();
-    if (canScan != CanStartScan.yes) {
-      setState(() {
-        _error = 'Cannot scan for WiFi networks: ${canScan.toString()}';
-      });
-      return;
-    }
+    try {
+      final results = await WiFiScan.instance.getScannedResults();
+      
+      // Create a map to store unique SSIDs with their strongest signal
+      final Map<String, WiFiAccessPoint> uniqueNetworks = {};
+      for (var accessPoint in results) {
+        final ssid = accessPoint.ssid.isNotEmpty ? accessPoint.ssid : 'Hidden Network';
+        if (!uniqueNetworks.containsKey(ssid) ||
+            accessPoint.level > uniqueNetworks[ssid]!.level) {
+          uniqueNetworks[ssid] = accessPoint;
+        }
+      }
 
-    await _startWiFiScan();
+      if (mounted) {
+        setState(() {
+          _accessPoints = uniqueNetworks.values.toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error initializing WiFi scan: $e');
+    }
   }
 
   Future<void> _startWiFiScan() async {
-    final permissions = await [
-      Permission.location,
-      Permission.nearbyWifiDevices,
-    ].request();
-
-    if (!permissions.values.every((status) => status.isGranted)) {
-      setState(() {
-        _error = 'Required permissions not granted';
-      });
-      return;
-    }
-
-    final canStartScan = await WiFiScan.instance.canStartScan();
-    if (canStartScan != CanStartScan.yes) {
-      setState(() {
-        _error = 'Cannot start scan: $canStartScan';
-      });
-      return;
-    }
-
     setState(() {
       _isScanning = true;
-      _error = null;
     });
 
-    final isScanning = await WiFiScan.instance.startScan();
-    if (!isScanning) {
+    // Show loading spinner for 1 second
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (mounted) {
       setState(() {
-        _error = 'Failed to start scan';
         _isScanning = false;
       });
-      return;
     }
-
-    // Wait for scan results
-    await Future.delayed(const Duration(seconds: 2));
-    final results = await WiFiScan.instance.getScannedResults();
-    
-    // Create a map to store unique SSIDs with their strongest signal
-    final Map<String, WiFiAccessPoint> uniqueNetworks = {};
-    for (var accessPoint in results) {
-      final ssid = accessPoint.ssid.isNotEmpty ? accessPoint.ssid : 'Hidden Network';
-      if (!uniqueNetworks.containsKey(ssid) ||
-          accessPoint.level > uniqueNetworks[ssid]!.level) {
-        uniqueNetworks[ssid] = accessPoint;
-      }
-    }
-
-    setState(() {
-      _accessPoints = uniqueNetworks.values.toList();
-      _isScanning = false;
-    });
   }
 
   Future<void> _loadTemplates() async {
@@ -447,15 +420,26 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
                               _selectedNetwork!.capabilities.contains('WEP')))
                         TextFormField(
                           controller: _passwordController,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'WiFi Password',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 12,
                             ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _showPassword ? Icons.visibility_off : Icons.visibility,
+                                color: Colors.grey,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _showPassword = !_showPassword;
+                                });
+                              },
+                            ),
                           ),
-                          obscureText: true,
+                          obscureText: !_showPassword,
                           onChanged: (value) {
                             setState(() {
                               _password = value;

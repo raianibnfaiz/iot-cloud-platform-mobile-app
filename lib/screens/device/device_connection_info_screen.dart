@@ -91,59 +91,7 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
   }
 
   Future<void> _initializeWiFiScan() async {
-    final canScan = await WiFiScan.instance.canStartScan();
-    if (canScan != CanStartScan.yes) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Cannot scan for WiFi networks: ${canScan.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
-    await _startWiFiScan();
-  }
-
-  Future<void> _startWiFiScan() async {
-    setState(() {
-      _isScanningWifi = true;
-    });
-
     try {
-      // Request permissions individually
-      final locationStatus = await Permission.location.request();
-      final nearbyWifiStatus = await Permission.nearbyWifiDevices.request();
-
-      if (!locationStatus.isGranted || !nearbyWifiStatus.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Required permissions not granted'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      final isScanning = await WiFiScan.instance.startScan();
-      if (!isScanning) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to start WiFi scan'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Wait for scan results
-      await Future.delayed(const Duration(seconds: 2));
       final results = await WiFiScan.instance.getScannedResults();
       
       // Create a map to store unique SSIDs with their strongest signal
@@ -159,21 +107,25 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
       if (mounted) {
         setState(() {
           _accessPoints = uniqueNetworks.values.toList();
-          _isScanningWifi = false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isScanningWifi = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error scanning WiFi: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      debugPrint('Error initializing WiFi scan: $e');
+    }
+  }
+
+  Future<void> _startWiFiScan() async {
+    setState(() {
+      _isScanningWifi = true;
+    });
+
+    // Show loading spinner for 1 second
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (mounted) {
+      setState(() {
+        _isScanningWifi = false;
+      });
     }
   }
 
