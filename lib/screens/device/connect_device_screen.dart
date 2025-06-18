@@ -367,8 +367,8 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
                             onPressed: _isScanning ? null : _startWiFiScan,
                             icon: _isScanning
                                 ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
+                                    width: 16,
+                                    height: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                     ),
@@ -383,11 +383,12 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
                           labelText: 'Select WiFi Network',
                           border: OutlineInputBorder(),
                           contentPadding: EdgeInsets.symmetric(
-                            horizontal: 16,
+                            horizontal: 12,
                             vertical: 12,
                           ),
                         ),
                         value: _selectedNetwork,
+                        isExpanded: true, // Add this to ensure dropdown takes full width
                         items: _accessPoints.map((ap) {
                           final ssid = ap.ssid.isNotEmpty ? ap.ssid : 'Hidden Network';
                           final secured = ap.capabilities.contains('WPA') ||
@@ -401,7 +402,12 @@ class _ConnectDeviceScreenState extends State<ConnectDeviceScreen> {
                                   size: 16,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(ssid),
+                                Expanded( // Wrap the Text in Expanded
+                                  child: Text(
+                                    ssid,
+                                    overflow: TextOverflow.ellipsis, // Add text overflow handling
+                                  ),
+                                ),
                               ],
                             ),
                           );

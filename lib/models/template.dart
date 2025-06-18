@@ -67,6 +67,28 @@ class TemplateWidget {
     this.configuration,
   });
 
+  TemplateWidget copyWith({
+    String? widgetId,
+    String? name,
+    String? image,
+    int? pinRequired,
+    List<PinConfig>? pinConfig,
+    String? id,
+    Position? position,
+    Map<String, dynamic>? configuration,
+  }) {
+    return TemplateWidget(
+      widgetId: widgetId ?? this.widgetId,
+      name: name ?? this.name,
+      image: image ?? this.image,
+      pinRequired: pinRequired ?? this.pinRequired,
+      pinConfig: pinConfig ?? this.pinConfig,
+      id: id ?? this.id,
+      position: position ?? this.position,
+      configuration: configuration ?? this.configuration,
+    );
+  }
+
   factory TemplateWidget.fromJson(Map<String, dynamic> json) {
     // Get widget_id, ensuring it's never empty
     String widgetId = '';
@@ -197,6 +219,22 @@ class Template {
     required this.widgetList,
     required this.virtual_pins,
   });
+
+  Template copyWith({
+    String? id,
+    String? templateName,
+    String? templateId,
+    List<TemplateWidget>? widgetList,
+    List<VirtualPin>? virtual_pins,
+  }) {
+    return Template(
+      id: id ?? this.id,
+      templateName: templateName ?? this.templateName,
+      templateId: templateId ?? this.templateId,
+      widgetList: widgetList ?? this.widgetList,
+      virtual_pins: virtual_pins ?? this.virtual_pins,
+    );
+  }
 
   @override
   bool operator ==(Object other) {

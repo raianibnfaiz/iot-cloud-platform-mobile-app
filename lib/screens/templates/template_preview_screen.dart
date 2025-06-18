@@ -227,6 +227,42 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     debugPrint('Building TemplatePreviewScreen for template: ${widget.template.templateName}');
     debugPrint('Template widget list count: ${widget.template.widgetList.length}');
     
+    // Print detailed widget position data
+    debugPrint('========================================');
+    debugPrint('WIDGET POSITION DATA AFTER BLUETOOTH CONNECTION:');
+    debugPrint('Template ID: ${widget.template.templateId}');
+    debugPrint('Template Name: ${widget.template.templateName}');
+    debugPrint('Total Widgets: ${widget.template.widgetList.length}');
+    debugPrint('========================================');
+    
+    for (int i = 0; i < widget.template.widgetList.length; i++) {
+      final templateWidget = widget.template.widgetList[i];
+      debugPrint('Widget ${i + 1}:');
+      debugPrint('  - ID: ${templateWidget.id}');
+      debugPrint('  - Name: ${templateWidget.name}');
+      debugPrint('  - Widget ID: ${templateWidget.widgetId}');
+      debugPrint('  - Position: (${templateWidget.position?.x ?? 0}, ${templateWidget.position?.y ?? 0})');
+      debugPrint('  - Pin Required: ${templateWidget.pinRequired}');
+      debugPrint('  - Pin Config Count: ${templateWidget.pinConfig.length}');
+      
+      // Print pin configuration details
+      for (int j = 0; j < templateWidget.pinConfig.length; j++) {
+        final pin = templateWidget.pinConfig[j];
+        debugPrint('    Pin ${j + 1}:');
+        debugPrint('      - Virtual Pin: ${pin.virtualPin}');
+        debugPrint('      - Value: ${pin.value}');
+        debugPrint('      - ID: ${pin.id}');
+      }
+      
+      // Print configuration if available
+      if (templateWidget.configuration != null && templateWidget.configuration!.isNotEmpty) {
+        debugPrint('  - Configuration: ${templateWidget.configuration}');
+      }
+      
+      debugPrint('  - Image: ${templateWidget.image.substring(0, min(100, templateWidget.image.length))}...');
+      debugPrint('----------------------------------------');
+    }
+    
     return BaseScreen(
       title: "Preview ${widget.template.templateName}",
       body: Stack(

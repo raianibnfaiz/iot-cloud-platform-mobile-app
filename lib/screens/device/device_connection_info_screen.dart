@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import '../../models/template.dart';
@@ -7,6 +8,7 @@ import '../../services/template_service.dart';
 import 'qr_scanner_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/api_service.dart';
+import '../templates/template_preview_screen.dart';
 
 class DeviceConnectionInfoScreen extends StatefulWidget {
   final Template template;
@@ -43,6 +45,7 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
   WiFiAccessPoint? _selectedNetwork;
   List<int>? _assignedPins;
   bool _isRequestingPins = false;
+  bool _hasNavigated = false;
 
   // Helper function to find matching WiFiAccessPoint
   WiFiAccessPoint? _findMatchingNetwork(WiFiAccessPoint? network) {
@@ -61,6 +64,7 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
     _selectedNetwork = widget.wifiNetwork;
     _loadTemplates();
     _initializeWiFiScan();
+    _requestVirtualPins(); // Automatically request virtual pins when screen loads
   }
 
   @override
@@ -165,14 +169,153 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
             // Send all the configuration data to ESP32
             await _sendConfigurationData();
 
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Device connected and configured successfully!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
+            // Wait for response from ESP32
+            String response = '';
+            connection!.input!.listen((Uint8List data) {
+              response = String.fromCharCodes(data);
+              debugPrint('----------------------------------------');
+              debugPrint('ESP32 Response Details:');
+              debugPrint('Raw response: $response');
+              debugPrint('Response length: ${response.length}');
+             // debugPrint('Response bytes: ${data.toString()}');
+              debugPrint('----------------------------------------');
+
+              // Check if response is empty or incomplete
+              if (response.trim().isEmpty) {
+                debugPrint('Empty response received from ESP32');
+                return;
+              }
+
+              try {
+                // Try to parse the response as JSON
+                final jsonResponse = json.decode(response);
+                debugPrint('Parsed JSON response: $jsonResponse');
+                
+                // Check if the response has the expected structure with status code
+                if (jsonResponse is Map<dynamic, dynamic> && jsonResponse.containsKey('status')) {
+                  if (jsonResponse['status'] == "success") {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Device configured successfully!'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+
+                      // Fetch the latest template data with widget positions and virtual pins
+                      _templateService.getTemplate(_selectedTemplate!.templateId).then((latestTemplate) {
+                        // Update template with virtual pins if available
+                        if (_assignedPins != null && _assignedPins!.isNotEmpty) {
+                          // Update widget positions and virtual pins in the template
+                          final updatedWidgets = latestTemplate.widgetList.asMap().entries.map((entry) {
+                            final widget = entry.value;
+                            final index = entry.key;
+                            
+                            // Create new pin configuration if needed
+                            List<PinConfig>? updatedPinConfig;
+                            if (widget.pinConfig.isNotEmpty) {
+                              updatedPinConfig = widget.pinConfig.map((pin) {
+                                if (index < _assignedPins!.length) {
+                                  return PinConfig(
+                                    virtualPin: _assignedPins![index],
+                                    value: pin.value,
+                                    id: pin.id,
+                                  );
+                                }
+                                return pin;
+                              }).toList();
+                            }
+
+                            // Create updated widget with new pin configuration
+                            return TemplateWidget(
+                              widgetId: widget.widgetId,
+                              name: widget.name,
+                              image: widget.image,
+                              pinRequired: widget.pinRequired,
+                              pinConfig: updatedPinConfig ?? widget.pinConfig,
+                              id: widget.id,
+                              position: widget.position,
+                              configuration: widget.configuration,
+                            );
+                          }).toList();
+
+                          // Create updated template with new widget data
+                          final updatedTemplate = Template(
+                            id: latestTemplate.id,
+                            templateName: latestTemplate.templateName,
+                            templateId: latestTemplate.templateId,
+                            widgetList: updatedWidgets,
+                            virtual_pins: latestTemplate.virtual_pins,
+                          );
+
+                          if (!_hasNavigated && mounted) {
+                            _hasNavigated = true;
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => TemplatePreviewScreen(
+                                  template: updatedTemplate,
+                                ),
+                              ),
+                            );
+                          }
+                        } else {
+                          // If no virtual pins, just navigate with latest template
+                          if (!_hasNavigated && mounted) {
+                            _hasNavigated = true;
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => TemplatePreviewScreen(
+                                  template: latestTemplate,
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      }).catchError((error) {
+                        debugPrint('Error fetching latest template: $error');
+                        // If fetch fails, navigate with current template
+                        if (!_hasNavigated && mounted) {
+                          _hasNavigated = true;
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TemplatePreviewScreen(
+                                template: _selectedTemplate!,
+                              ),
+                            ),
+                          );
+                        }
+                      });
+                    }
+                  } else {
+                    throw Exception(jsonResponse['message'] ?? 'Device configuration failed');
+                  }
+                } else {
+                  // If response doesn't have expected structure, show error
+                  debugPrint('Unexpected response format: $response');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Invalid response from device'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              } catch (e) {
+                debugPrint('Error parsing ESP32 response: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error processing device response: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            });
 
           } catch (e) {
             setState(() {
@@ -322,8 +465,9 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully assigned pins: ${pins.join(", ")}'),
+            content: Text('Successfully assigned virtual pins: ${pins.join(", ")}'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -453,126 +597,10 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
             ),
             const SizedBox(height: 32),
 
-            // Request Virtual Pin Button
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: _isRequestingPins ? null : _requestVirtualPins,
-                icon: _isRequestingPins
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Icon(Icons.pin),
-                label: Text(_isRequestingPins ? 'Requesting Pins...' : 'Request Virtual Pin'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 16,
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            if (_assignedPins != null) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Assigned Virtual Pins',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _assignedPins!.join(", "),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-
             // Connect/Disconnect Button
             Center(
-              child: isConnected
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _disconnectDevice,
-                              icon: const Icon(Icons.bluetooth_disabled),
-                              label: const Text('Disconnect'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                textStyle: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                if (connection != null) {
-                                  await _sendConfigurationData();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Configuration resent to device'),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Resend Config'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                textStyle: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
+              child: isConnected || isConnecting
+                  ? const SizedBox.shrink() // Remove Disconnect and Resend Config buttons
                   : ElevatedButton.icon(
                       onPressed: isConnecting ? null : _connectToDevice,
                       icon: isConnecting
@@ -706,39 +734,50 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Replace the Row around line 807 in device_connection_info_screen.dart
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Network Name',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
+                Expanded(  // Add Expanded to constrain the Text widget
+                  child: const Text(
+                    'Network Name',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                    overflow: TextOverflow.ellipsis,  // Add this to handle text overflow
                   ),
                 ),
                 IconButton(
+                  padding: EdgeInsets.zero,  // Reduce padding to save space
+                  constraints: const BoxConstraints(),  // Minimize constraints
                   icon: _isScanningWifi
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                       : const Icon(Icons.refresh),
                   onPressed: _isScanningWifi ? null : _startWiFiScan,
                 ),
               ],
             ),
             const SizedBox(height: 8),
+            // Fix for the DropdownButtonFormField at line 813
             DropdownButtonFormField<WiFiAccessPoint>(
               value: currentNetwork,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
+              isExpanded: true, // Add this to make the dropdown take full width
               items: _accessPoints.map((WiFiAccessPoint network) {
                 return DropdownMenuItem<WiFiAccessPoint>(
                   value: network,
-                  child: Text(network.ssid.isNotEmpty ? network.ssid : 'Hidden Network'),
+                  child: Text(
+                    network.ssid.isNotEmpty ? network.ssid : 'Hidden Network',
+                    overflow: TextOverflow.ellipsis, // Add text overflow handling
+                  ),
                 );
               }).toList(),
               onChanged: (WiFiAccessPoint? newValue) {
@@ -748,7 +787,7 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
                   });
                 }
               },
-            ),
+            )
           ],
         ),
       ),
