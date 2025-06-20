@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import '../../models/template.dart';
@@ -46,6 +47,8 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
   List<int>? _assignedPins;
   bool _isRequestingPins = false;
   bool _hasNavigated = false;
+  StreamSubscription<Uint8List>? _btInputSubscription;
+  Completer<void>? _navigationCompleter;
 
   // Helper function to find matching WiFiAccessPoint
   WiFiAccessPoint? _findMatchingNetwork(WiFiAccessPoint? network) {
@@ -143,20 +146,17 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
       isConnecting = true;
     });
 
+    _navigationCompleter = Completer<void>();
+
     try {
-      // Start discovery to find the device
       FlutterBluetoothSerial.instance.startDiscovery().listen((r) async {
-        // Check if the discovered device name matches our device ID
         if (r.device.name == widget.deviceId) {
           setState(() {
             isScanning = false;
           });
-
-          // Cancel discovery once we find our device
           FlutterBluetoothSerial.instance.cancelDiscovery();
 
           try {
-            // Attempt to connect to the device
             connection = await BluetoothConnection.toAddress(r.device.address);
 
             setState(() {
@@ -165,164 +165,42 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
             });
 
             debugPrint('Connected to ${widget.deviceId}');
-
-            // Send all the configuration data to ESP32
             await _sendConfigurationData();
 
-            // Wait for response from ESP32
-            String response = '';
-            connection!.input!.listen((Uint8List data) {
-              response = String.fromCharCodes(data);
-              debugPrint('----------------------------------------');
-              debugPrint('ESP32 Response Details:');
-              debugPrint('Raw response: $response');
-              debugPrint('Response length: ${response.length}');
-             // debugPrint('Response bytes: ${data.toString()}');
-              debugPrint('----------------------------------------');
-
-              // Check if response is empty or incomplete
-              if (response.trim().isEmpty) {
-                debugPrint('Empty response received from ESP32');
-                return;
-              }
+            // Listen for ESP32 response
+            _btInputSubscription = connection!.input!.listen((Uint8List data) async {
+              if (_navigationCompleter?.isCompleted ?? true) return;
+              String response = String.fromCharCodes(data);
+              debugPrint('ESP32 Response: $response');
 
               try {
-                // Try to parse the response as JSON
                 final jsonResponse = json.decode(response);
-                debugPrint('Parsed JSON response: $jsonResponse');
-                
-                // Check if the response has the expected structure with status code
-                if (jsonResponse is Map<dynamic, dynamic> && jsonResponse.containsKey('status')) {
-                  if (jsonResponse['status'] == "success") {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Device configured successfully!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-
-                      // Fetch the latest template data with widget positions and virtual pins
-                      _templateService.getTemplate(_selectedTemplate!.templateId).then((latestTemplate) {
-                        // Update template with virtual pins if available
-                        if (_assignedPins != null && _assignedPins!.isNotEmpty) {
-                          // Update widget positions and virtual pins in the template
-                          final updatedWidgets = latestTemplate.widgetList.asMap().entries.map((entry) {
-                            final widget = entry.value;
-                            final index = entry.key;
-                            
-                            // Create new pin configuration if needed
-                            List<PinConfig>? updatedPinConfig;
-                            if (widget.pinConfig.isNotEmpty) {
-                              updatedPinConfig = widget.pinConfig.map((pin) {
-                                if (index < _assignedPins!.length) {
-                                  return PinConfig(
-                                    virtualPin: _assignedPins![index],
-                                    value: pin.value,
-                                    id: pin.id,
-                                  );
-                                }
-                                return pin;
-                              }).toList();
-                            }
-
-                            // Create updated widget with new pin configuration
-                            return TemplateWidget(
-                              widgetId: widget.widgetId,
-                              name: widget.name,
-                              image: widget.image,
-                              pinRequired: widget.pinRequired,
-                              pinConfig: updatedPinConfig ?? widget.pinConfig,
-                              id: widget.id,
-                              position: widget.position,
-                              configuration: widget.configuration,
-                            );
-                          }).toList();
-
-                          // Create updated template with new widget data
-                          final updatedTemplate = Template(
-                            id: latestTemplate.id,
-                            templateName: latestTemplate.templateName,
-                            templateId: latestTemplate.templateId,
-                            widgetList: updatedWidgets,
-                            virtual_pins: latestTemplate.virtual_pins,
-                          );
-
-                          if (!_hasNavigated && mounted) {
-                            _hasNavigated = true;
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TemplatePreviewScreen(
-                                  template: updatedTemplate,
-                                ),
-                              ),
-                            );
-                          }
-                        } else {
-                          // If no virtual pins, just navigate with latest template
-                          if (!_hasNavigated && mounted) {
-                            _hasNavigated = true;
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TemplatePreviewScreen(
-                                  template: latestTemplate,
-                                ),
-                              ),
-                            );
-                          }
-                        }
-                      }).catchError((error) {
-                        debugPrint('Error fetching latest template: $error');
-                        // If fetch fails, navigate with current template
-                        if (!_hasNavigated && mounted) {
-                          _hasNavigated = true;
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => TemplatePreviewScreen(
-                                template: _selectedTemplate!,
-                              ),
-                            ),
-                          );
-                        }
-                      });
-                    }
-                  } else {
-                    throw Exception(jsonResponse['message'] ?? 'Device configuration failed');
-                  }
-                } else {
-                  // If response doesn't have expected structure, show error
-                  debugPrint('Unexpected response format: $response');
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Invalid response from device'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
+                if (jsonResponse is Map && jsonResponse['status'] == "success") {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Device configured successfully!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  await _navigateToPreviewScreen();
                 }
               } catch (e) {
                 debugPrint('Error parsing ESP32 response: $e');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error processing device response: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
               }
             });
 
+            // Timeout fallback: If no response in 10 seconds, proceed anyway
+            Future.delayed(const Duration(seconds: 10), () async {
+              if (!(_navigationCompleter?.isCompleted ?? true)) {
+                debugPrint('Timeout: Proceeding to preview screen with latest template.');
+                await _navigateToPreviewScreen();
+              }
+            });
           } catch (e) {
             setState(() {
               isConnecting = false;
             });
             debugPrint('Connection failed: $e');
-
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -484,6 +362,29 @@ class _DeviceConnectionInfoScreenState extends State<DeviceConnectionInfoScreen>
           ),
         );
       }
+    }
+  }
+
+  Future<void> _navigateToPreviewScreen() async {
+    if (_navigationCompleter?.isCompleted ?? true) return;
+    _navigationCompleter?.complete();
+    _btInputSubscription?.cancel();
+
+    try {
+      final latestTemplate = await _templateService.getTemplate(_selectedTemplate!.templateId);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TemplatePreviewScreen(template: latestTemplate),
+        ),
+      );
+    } catch (e) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TemplatePreviewScreen(template: _selectedTemplate!),
+        ),
+      );
     }
   }
 

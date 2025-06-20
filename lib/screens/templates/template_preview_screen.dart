@@ -11,6 +11,7 @@ import '../../services/toast_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 import '../../services/mqtt_service.dart';
+import '../dashboard/dashboard_screen.dart';
 
 class TemplatePreviewScreen extends StatefulWidget {
   final Template template;
@@ -93,10 +94,11 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
       );
 
       if (mounted) {
-        ToastService.success(
-          context,
-          message: 'Sent value: ${newValue ? 1 : 0} to pin $virtualPin',
-        );
+        // ToastService.success(
+        //   context,
+        //   message: 'Sent value: ${newValue ? 1 : 0} to pin $virtualPin',
+        // );
+        print('Sent value: ${newValue ? 1 : 0} to pin $virtualPin');
       }
     } catch (e) {
       if (mounted) {
@@ -265,6 +267,18 @@ class _TemplatePreviewScreenState extends State<TemplatePreviewScreen> {
     
     return BaseScreen(
       title: "Preview ${widget.template.templateName}",
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.dashboard_outlined),
+          tooltip: 'Go to Dashboard',
+          onPressed: () {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => DashboardScreen()),
+              (route) => false,
+            );
+          },
+        ),
+      ],
       body: Stack(
         children: [
           // Connection status indicator

@@ -7,7 +7,7 @@ import '../models/template.dart';
 class APIService {
   static const String baseUrl =
        //'https://cloud-platform-server-for-bjit.onrender.com';
-  'http://192.168.154.187:3000';
+  'http://103.197.206.61:3000';
   static const String _tokenKey = 'server_token';
   static const String _userKey = 'user_data';
 

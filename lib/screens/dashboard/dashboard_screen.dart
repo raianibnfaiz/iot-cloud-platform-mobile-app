@@ -19,6 +19,7 @@ import '../device/connect_device_screen.dart';
 import '../../providers/playground_provider.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -35,10 +36,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
   String? _error;
   StreamSubscription? _templateUpdateSubscription;
+  bool _permissionsRequested = false;
 
   @override
   void initState() {
     super.initState();
+    _requestInitialPermissions();
     _loadTemplates();
     // Listen for template updates
     _templateUpdateSubscription = _templateService.onTemplateUpdate.listen((
@@ -235,6 +238,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _requestInitialPermissions() async {
+    if (_permissionsRequested) return;
+    _permissionsRequested = true;
+    // Check permissions
+    final locationStatus = await Permission.location.status;
+    final nearbyStatus = await Permission.nearbyWifiDevices.status;
+    final cameraStatus = await Permission.camera.status;
+    if (!locationStatus.isGranted || !nearbyStatus.isGranted || !cameraStatus.isGranted) {
+      // Show dialog explaining why permissions are needed
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Permissions Required'),
+          content: const Text(
+            'This app needs Location, Nearby Device, and Camera permissions to scan WiFi networks, connect to devices, and scan QR codes. Please grant these permissions.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await [
+                  Permission.location,
+                  Permission.nearbyWifiDevices,
+                  Permission.camera,
+                ].request();
+              },
+              child: const Text('Grant Permissions'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   @override
