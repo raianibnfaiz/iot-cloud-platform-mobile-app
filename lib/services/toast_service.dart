@@ -102,7 +102,7 @@ class ToastService {
     required String message,
     Duration? duration,
     VoidCallback? onDismiss,
-    bool immediate = false,
+    bool immediate = false, required TextStyle textStyle,
   }) {
     ToastService().showToast(
       context,

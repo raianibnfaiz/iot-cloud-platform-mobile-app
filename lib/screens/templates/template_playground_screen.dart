@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../models/template.dart';
 import '../../models/widget.dart' as app_widget;
 import '../../models/virtual_pin.dart';
 import '../../providers/playground_provider.dart';
 import '../../providers/widget_provider.dart';
+import '../../services/api_service.dart';
 import '../../widgets/base_screen.dart';
 import '../../components/draggable_widget_component.dart';
 import '../../services/template_service.dart';
@@ -40,7 +42,32 @@ class _TemplatePlaygroundScreenState extends State<TemplatePlaygroundScreen> {
       _updateUsedPins();
     });
   }
+// Add this method to the _TemplatePlaygroundScreenState class
+  Future<Map<String, dynamic>> _fetchWidgetConfiguration(String widgetId) async {
+    try {
+      final url = '${APIService.baseUrl}/widgets/$widgetId/configuration';
 
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          // Add authorization headers if needed
+          // 'Authorization': 'Bearer ${your_token}',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['configuration'] as Map<String, dynamic>? ?? {};
+      } else {
+        debugPrint('Failed to fetch configuration: ${response.statusCode}');
+        return {};
+      }
+    } catch (e) {
+      debugPrint('Error fetching widget configuration: $e');
+      return {};
+    }
+  }
   void _loadExistingWidgets() {
     final playgroundProvider = context.read<PlaygroundProvider>();
     final widgetProvider = context.read<WidgetProvider>();
@@ -722,6 +749,61 @@ class _TemplatePlaygroundScreenState extends State<TemplatePlaygroundScreen> {
     }
   }
 
+  Future<void> _saveTemplateToBackend() async {
+    final apiService = APIService();
+    final token = await apiService.getServerToken();
+    if (token == null) {
+      ToastService.error(context, message: 'No auth token found');
+      return;
+    }
+
+    final playgroundProvider = context.read<PlaygroundProvider>();
+
+    // Build widget_list for the request
+    final widgetList = playgroundProvider.widgets.map((positionedWidget) {
+      return {
+        "widget_id": positionedWidget.widget.id,
+        "instance_id": positionedWidget.id, // Use the unique id from PlaygroundProvider
+        "pinConfig": positionedWidget.widget.pinConfig.map((pin) => {
+          "pin_id": pin.virtualPin,
+          "pin_name": "Virtual Pin ${pin.virtualPin}",
+          "value": pin.value,
+          // You may want to store min_value, max_value, is_used, _id if available in your model
+          "min_value": 0, // Replace with actual value if available
+          "max_value": 255, // Replace with actual value if available
+          "is_used": true, // Replace with actual value if available
+          "_id": pin.id,
+        }).toList(),
+        "position": {
+          "x": positionedWidget.position.x,
+          "y": positionedWidget.position.y,
+        },
+      };
+    }).toList();
+
+    final body = {
+      "template_name": widget.template.templateName,
+      "widget_list": widgetList,
+    };
+
+    final url = "${APIService.baseUrl}/users/templates/${widget.template.templateId}";
+    final response = await http.put(
+      Uri.parse(url),
+      headers: {
+        "accept": "application/json",
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+      body: json.encode(body),
+    );
+
+    if (response.statusCode == 200) {
+      ToastService.success(context, message: "Template saved successfully!");
+    } else {
+      ToastService.error(context, message: "Failed to save template: ${response.body}");
+    }
+  }
+
   void _updateWidgetPosition(String widgetId, Offset newPosition) {
     debugPrint('=== Updating widget position ===');
     debugPrint('Widget ID: $widgetId');
@@ -768,7 +850,11 @@ class _TemplatePlaygroundScreenState extends State<TemplatePlaygroundScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.save),
-          onPressed: _isSaving ? null : () => _saveTemplate(),
+          onPressed: _isSaving ? null : () async {
+            setState(() { _isSaving = true; });
+            await _saveTemplateToBackend();
+            setState(() { _isSaving = false; });
+          },
         ),
         IconButton(
           icon: Icon(_isPreviewMode ? Icons.edit : Icons.play_arrow),

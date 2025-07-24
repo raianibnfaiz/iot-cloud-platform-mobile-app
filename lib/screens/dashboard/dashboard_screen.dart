@@ -20,6 +20,7 @@ import '../../providers/playground_provider.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:permission_handler/permission_handler.dart';
+import 'brandnew_preview_page.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -555,7 +556,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             Navigator.push(
                                               context,
                                               MaterialPageRoute(
-                                                builder: (context) => ChangeNotifierProvider(
+                                                builder: (context) =>
+                                                    ChangeNotifierProvider(
                                                   create: (_) => PlaygroundProvider(),
                                                   child: TemplatePlaygroundScreen(
                                                     template: template,
@@ -620,6 +622,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                   ],
                                                 ),
                                               ),
+                                              const PopupMenuItem(
+                                                value: 'preview',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.visibility_outlined),
+                                                    SizedBox(width: 8),
+                                                    Text('Template Preview'),
+                                                  ],
+                                                ),
+                                              ),
                                               PopupMenuItem(
                                                 value: 'delete',
                                                 child: Row(
@@ -634,6 +646,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             onSelected: (value) {
                                               if (value == 'details') {
                                                 _showTemplateDetails(context, template);
+                                              } else if (value == 'preview') {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => BrandNewPreviewPage(templateName: template.templateName, templateId: template.templateId,),
+                                                  ),
+                                                );
                                               } else if (value == 'delete') {
                                                 showDialog(
                                                   context: context,
