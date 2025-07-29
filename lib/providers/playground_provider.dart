@@ -45,7 +45,24 @@ class PlaygroundProvider extends ChangeNotifier {
   }
 
   void removeWidget(String widgetId) {
+    debugPrint('=== Removing widget from PlaygroundProvider ===');
+    debugPrint('Widget ID to remove: $widgetId');
+    debugPrint('Widgets before removal: ${_widgets.length}');
+
     _widgets.removeWhere((w) => w.id == widgetId);
+
+    debugPrint('Widgets after removal: ${_widgets.length}');
+    notifyListeners();
+  }
+
+  // Add clearWidgets method to clear all widgets at once
+  void clearWidgets() {
+    debugPrint('=== Clearing all widgets from PlaygroundProvider ===');
+    debugPrint('Widgets before clearing: ${_widgets.length}');
+
+    _widgets.clear();
+
+    debugPrint('Widgets after clearing: ${_widgets.length}');
     notifyListeners();
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../main.dart';
 import '../../models/template.dart';
 import '../../models/widget.dart' as app_widget;
 import '../../models/virtual_pin.dart';
@@ -25,7 +26,8 @@ class TemplatePlaygroundScreen extends StatefulWidget {
       _TemplatePlaygroundScreenState();
 }
 
-class _TemplatePlaygroundScreenState extends State<TemplatePlaygroundScreen> {
+class _TemplatePlaygroundScreenState extends State<TemplatePlaygroundScreen> with RouteAware {
+
   final _templateService = TemplateService();
   bool _isSaving = false;
   bool _isPreviewMode = false;
@@ -42,6 +44,42 @@ class _TemplatePlaygroundScreenState extends State<TemplatePlaygroundScreen> {
       _updateUsedPins();
     });
   }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+    _refreshTemplateData(); // Initial load when screen is built
+  }
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+  @override
+  void didPopNext() {
+    debugPrint("Returned to TemplatePlaygroundScreen, refreshing...");
+    _refreshTemplateData();
+  }
+  Future<void> _refreshTemplateData() async {
+    try {
+      final updatedTemplate = await _templateService.getTemplate(widget.template.templateId);
+
+      setState(() {
+        widget.template.widgetList.clear();
+        widget.template.widgetList.addAll(updatedTemplate.widgetList);
+        widget.template.virtual_pins.clear();
+        widget.template.virtual_pins.addAll(updatedTemplate.virtual_pins);
+      });
+
+      context.read<PlaygroundProvider>().clearWidgets(); // Optional: reset first
+      _loadExistingWidgets(); // Re-load based on updated template
+      _updateUsedPins();
+    } catch (e) {
+      debugPrint('Failed to refresh template: $e');
+    }
+  }
+
+
 // Add this method to the _TemplatePlaygroundScreenState class
   Future<Map<String, dynamic>> _fetchWidgetConfiguration(String widgetId) async {
     try {

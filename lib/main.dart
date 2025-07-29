@@ -41,6 +41,7 @@ Future<void> main() async {
 
   // Initialize Hive and widget service
   final widgetService = WidgetService();
+
   await widgetService.initialize();
 
   runApp(
@@ -54,8 +55,9 @@ Future<void> main() async {
     ),
   );
 }
-
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 class MyApp extends StatelessWidget {
+
   const MyApp({super.key});
 
   @override
@@ -71,6 +73,7 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             title: 'BJIT IoT Platform',
             debugShowCheckedModeBanner: false,
+            navigatorObservers: [routeObserver],
             themeMode:
                 themeProvider.useSystemTheme
                     ? ThemeMode.system
