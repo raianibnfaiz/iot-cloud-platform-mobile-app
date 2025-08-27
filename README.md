@@ -1,6 +1,6 @@
-# bjit_iot_platform_mobile_app
+# iot_platform_mobile_app
 
-The BJIT IoT Platform Mobile App is a comprehensive solution designed to integrate IoT devices 
+The IoT Platform Mobile App is a comprehensive solution designed to integrate IoT devices 
 with user-friendly mobile interfaces, enabling seamless control, monitoring, and automation across
 industries. Leveraging BJIT's expertise in IoT, AI, and cross-platform development, the app 
 supports features like real-time data analytics, remote device management, and secure connectivity.
